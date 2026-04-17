@@ -10,17 +10,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-body {
-  font-family: Arial;
-  margin: 20px;
-  background: #f6f7fb;
-}
-
+body { font-family: Arial; margin: 20px; background: #f6f7fb; }
 h2 { margin-bottom: 10px; }
 
-.filters {
-  margin-bottom: 15px;
-}
+.filters { margin-bottom: 15px; }
 
 select, input {
   padding: 6px;
@@ -62,9 +55,7 @@ a:hover { text-decoration: underline; }
   border-radius: 10px;
 }
 
-.pagination {
-  margin-top: 10px;
-}
+.pagination { margin-top: 10px; }
 
 button {
   margin: 2px;
@@ -89,6 +80,9 @@ button {
 
   <label>Buscar calle:</label>
   <input type="text" id="calleFilter" placeholder="Ej: Corrientes">
+
+  <label>Buscar N°RP:</label>
+  <input type="text" id="rpFilter" placeholder="Ej: RP-Z1-123">
 </div>
 
 <div id="table"></div>
@@ -157,13 +151,19 @@ function applyFilters() {
 
   let zona = document.getElementById("zonaFilter").value;
   let calle = document.getElementById("calleFilter").value.toUpperCase();
+  let rpSearch = document.getElementById("rpFilter").value.toUpperCase();
 
   filteredData = dataGlobal.filter(row => {
 
     let matchZona = (zona === "TODAS" || row.Zona === zona);
-    let matchCalle = !calle || getCol(row, "CALLE").toUpperCase().includes(calle);
 
-    return matchZona && matchCalle;
+    let calleVal = getCol(row, "CALLE").toUpperCase();
+    let matchCalle = !calle || calleVal.includes(calle);
+
+    let rpVal = (getCol(row, "N°RP") || getCol(row, "RP")).toUpperCase();
+    let matchRP = !rpSearch || rpVal.includes(rpSearch);
+
+    return matchZona && matchCalle && matchRP;
   });
 
   currentPage = 1;
@@ -283,6 +283,7 @@ function renderMap(data) {
 // ================= EVENTS =================
 document.getElementById("zonaFilter").addEventListener("change", applyFilters);
 document.getElementById("calleFilter").addEventListener("input", applyFilters);
+document.getElementById("rpFilter").addEventListener("input", applyFilters);
 
 // ================= INIT =================
 loadData();
