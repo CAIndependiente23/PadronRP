@@ -6,6 +6,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <style>
 body {
   font-family: Arial;
@@ -28,6 +31,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   background: white;
+  margin-top: 10px;
 }
 
 th {
@@ -43,17 +47,29 @@ td {
   border-bottom: 1px solid #eee;
 }
 
-tr:hover {
-  background: #eef5ff;
-}
+tr:hover { background: #eef5ff; }
 
 a {
   color: #2d6cdf;
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
+a:hover { text-decoration: underline; }
+
+#map {
+  height: 500px;
+  margin-top: 30px;
+  border-radius: 10px;
+}
+
+.pagination {
+  margin-top: 10px;
+}
+
+button {
+  margin: 2px;
+  padding: 5px 10px;
+  cursor: pointer;
 }
 </style>
 </head>
@@ -73,14 +89,23 @@ a:hover {
 </div>
 
 <div id="table"></div>
+<div class="pagination" id="pagination"></div>
+
+<h3>Mapa GIS</h3>
+<div id="map"></div>
 
 <script>
 
-// ================= SHEET =================
 const SHEET_URL =
 "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 
 let dataGlobal = [];
+let filteredData = [];
+let currentPage = 1;
+const pageSize = 100;
+
+let map;
+let markersLayer;
 
 // ================= HELPERS =================
 function getCol(row, name) {
@@ -102,13 +127,19 @@ function loadData() {
       dataGlobal = results.data;
 
       fillZoneFilter();
-      renderTable(dataGlobal);
+      filteredData = dataGlobal;
+
+      renderTable();
+      renderPagination();
+      initMap();
+      renderMap(filteredData);
     }
   });
 }
 
-// ================= ZONAS =================
+// ================= ZONES =================
 function fillZoneFilter() {
+
   let select = document.getElementById("zonaFilter");
 
   let zonas = [...new Set(dataGlobal.map(r => r.Zona).filter(Boolean))];
@@ -127,51 +158,50 @@ function applyFilters() {
   let zona = document.getElementById("zonaFilter").value;
   let calle = document.getElementById("calleFilter").value.toUpperCase();
 
-  let filtered = dataGlobal.filter(row => {
+  filteredData = dataGlobal.filter(row => {
 
     let matchZona = (zona === "TODAS" || row.Zona === zona);
-
-    // 🔥 BUSCA EN COLUMNA REAL "CALLE"
-    let matchCalle =
-      !calle ||
-      getCol(row, "CALLE").toUpperCase().includes(calle);
+    let matchCalle = !calle || getCol(row, "CALLE").toUpperCase().includes(calle);
 
     return matchZona && matchCalle;
   });
 
-  renderTable(filtered);
+  currentPage = 1;
+
+  renderTable();
+  renderPagination();
+  renderMap(filteredData);
 }
 
-// ================= RENDER TABLE =================
-function renderTable(data) {
+// ================= TABLE =================
+function renderTable() {
 
-  if (!data.length) {
+  let start = (currentPage - 1) * pageSize;
+  let pageData = filteredData.slice(start, start + pageSize);
+
+  if (!pageData.length) {
     document.getElementById("table").innerHTML = "<p>No hay resultados</p>";
     return;
   }
 
-  // columnas ocultas
-  const hiddenCols = ["N°", "Observaciones", "C1", "C2"];
+  let hiddenCols = ["N°", "Observaciones", "C1", "C2"];
 
-  let headers = Object.keys(data[0])
-    .filter(h => !hiddenCols.includes(h));
+  let headers = Object.keys(pageData[0]).filter(h => !hiddenCols.includes(h));
 
   let html = "<table><tr>";
 
-  headers.forEach(h => {
-    html += `<th>${h}</th>`;
-  });
+  headers.forEach(h => html += `<th>${h}</th>`);
 
   html += "</tr>";
 
-  data.forEach(row => {
+  pageData.forEach(row => {
+
     html += "<tr>";
 
     headers.forEach(h => {
 
       let value = row[h] || "";
 
-      // 🔥 FOTO COMO LINK
       if (h.toUpperCase().includes("FOTO") && value) {
         value = `<a href="${value}" target="_blank">Ver</a>`;
       }
@@ -185,6 +215,67 @@ function renderTable(data) {
   html += "</table>";
 
   document.getElementById("table").innerHTML = html;
+}
+
+// ================= PAGINATION =================
+function renderPagination() {
+
+  let totalPages = Math.ceil(filteredData.length / pageSize);
+
+  let html = "";
+
+  for (let i = 1; i <= totalPages; i++) {
+    html += `<button onclick="goPage(${i})">${i}</button>`;
+  }
+
+  document.getElementById("pagination").innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderTable();
+}
+
+// ================= MAP =================
+function initMap() {
+
+  map = L.map('map').setView([-34.6037, -58.3816], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+function renderMap(data) {
+
+  markersLayer.clearLayers();
+
+  data.forEach(row => {
+
+    if (!row.C1) return;
+
+    let coords = row.C1.split(",");
+    let lat = parseFloat(coords[0]);
+    let lng = parseFloat(coords[1]);
+
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    let popup = `
+      <b>${row.Calle || ""}</b><br>
+      Zona: ${row.Zona || ""}<br>
+      <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
+    `;
+
+    L.marker([lat, lng])
+      .bindPopup(popup)
+      .addTo(markersLayer);
+  });
+
+  if (markersLayer.getLayers().length > 0) {
+    map.fitBounds(markersLayer.getBounds());
+  }
 }
 
 // ================= EVENTS =================
