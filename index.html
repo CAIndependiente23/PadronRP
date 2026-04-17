@@ -1,1 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Google Sheets Viewer</title>
 
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
+<style>
+body {
+  font-family: Arial;
+  margin: 20px;
+  background: #f6f7fb;
+}
+
+h2 { margin-bottom: 10px; }
+
+.filters {
+  margin-bottom: 15px;
+}
+
+select, input {
+  padding: 6px;
+  margin-right: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  margin-top: 15px;
+}
+
+th {
+  background: #f1f3f6;
+  position: sticky;
+  top: 0;
+  padding: 10px;
+}
+
+td {
+  padding: 8px;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}
+
+tr:hover {
+  background: #eef5ff;
+}
+</style>
+</head>
+
+<body>
+
+<h2>📊 Google Sheets Viewer</h2>
+
+<div class="filters">
+  <label>Zona:</label>
+  <select id="zonaFilter">
+    <option value="TODAS">Todas</option>
+  </select>
+
+  <label>Buscar calle:</label>
+  <input type="text" id="calleFilter" placeholder="Ej: Corrientes">
+</div>
+
+<div id="table"></div>
+
+<script>
+
+const SHEET_URL =
+"https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
+
+let dataGlobal = [];
+
+// ---------------- LOAD DATA ----------------
+async function loadData() {
+
+  Papa.parse(SHEET_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+
+      dataGlobal = results.data;
+
+      fillZoneFilter();
+      renderTable(dataGlobal);
+    }
+  });
+}
+
+// ---------------- FILL ZONES ----------------
+function fillZoneFilter() {
+  let select = document.getElementById("zonaFilter");
+
+  let zonas = [...new Set(dataGlobal.map(r => r.Zona).filter(Boolean))];
+
+  zonas.forEach(z => {
+    let opt = document.createElement("option");
+    opt.value = z;
+    opt.textContent = z;
+    select.appendChild(opt);
+  });
+}
+
+// ---------------- FILTER ----------------
+function applyFilters() {
+
+  let zona = document.getElementById("zonaFilter").value;
+  let calle = document.getElementById("calleFilter").value.toUpperCase();
+
+  let filtered = dataGlobal.filter(row => {
+
+    let matchZona = (zona === "TODAS" || row.Zona === zona);
+    let matchCalle = !calle || (row.Calle || "").toUpperCase().includes(calle);
+
+    return matchZona && matchCalle;
+  });
+
+  renderTable(filtered);
+}
+
+// ---------------- RENDER TABLE ----------------
+function renderTable(data) {
+
+  let html = "<table><tr>";
+
+  if (data.length === 0) {
+    document.getElementById("table").innerHTML = "<p>No hay resultados</p>";
+    return;
+  }
+
+  // headers
+  Object.keys(data[0]).forEach(h => {
+    html += `<th>${h}</th>`;
+  });
+
+  html += "</tr>";
+
+  // rows
+  data.forEach(row => {
+    html += "<tr>";
+    Object.values(row).forEach(v => {
+      html += `<td>${v || ""}</td>`;
+    });
+    html += "</tr>";
+  });
+
+  html += "</table>";
+
+  document.getElementById("table").innerHTML = html;
+}
+
+// ---------------- EVENTS ----------------
+document.getElementById("zonaFilter").addEventListener("change", applyFilters);
+document.getElementById("calleFilter").addEventListener("input", applyFilters);
+
+// ---------------- INIT ----------------
+loadData();
+
+</script>
+
+</body>
+</html>
