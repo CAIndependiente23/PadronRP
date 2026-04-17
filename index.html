@@ -58,7 +58,7 @@ a:hover { text-decoration: underline; }
 
 #map {
   height: 500px;
-  margin-top: 30px;
+  margin-bottom: 20px;
   border-radius: 10px;
 }
 
@@ -78,6 +78,9 @@ button {
 
 <h2>REJAS PERIMETRALES</h2>
 
+<h3>Mapa GIS</h3>
+<div id="map"></div>
+
 <div class="filters">
   <label>Zona:</label>
   <select id="zonaFilter">
@@ -90,9 +93,6 @@ button {
 
 <div id="table"></div>
 <div class="pagination" id="pagination"></div>
-
-<h3>Mapa GIS</h3>
-<div id="map"></div>
 
 <script>
 
@@ -129,15 +129,15 @@ function loadData() {
       fillZoneFilter();
       filteredData = dataGlobal;
 
+      initMap();
       renderTable();
       renderPagination();
-      initMap();
       renderMap(filteredData);
     }
   });
 }
 
-// ================= ZONES =================
+// ================= ZONAS =================
 function fillZoneFilter() {
 
   let select = document.getElementById("zonaFilter");
@@ -262,9 +262,11 @@ function renderMap(data) {
 
     if (isNaN(lat) || isNaN(lng)) return;
 
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "-";
+
     let popup = `
-      <b>${row.Calle || ""}</b><br>
-      Zona: ${row.Zona || ""}<br>
+      <b>${rp}</b><br>
+      ${row.Calle || ""}<br>
       <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
     `;
 
