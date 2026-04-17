@@ -76,12 +76,21 @@ a:hover {
 
 <script>
 
+// ================= SHEET =================
 const SHEET_URL =
 "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 
 let dataGlobal = [];
 
-// ---------------- LOAD ----------------
+// ================= HELPERS =================
+function getCol(row, name) {
+  let key = Object.keys(row).find(k =>
+    k.trim().toUpperCase() === name.trim().toUpperCase()
+  );
+  return key ? row[key] : "";
+}
+
+// ================= LOAD =================
 function loadData() {
 
   Papa.parse(SHEET_URL, {
@@ -98,7 +107,7 @@ function loadData() {
   });
 }
 
-// ---------------- ZONAS ----------------
+// ================= ZONAS =================
 function fillZoneFilter() {
   let select = document.getElementById("zonaFilter");
 
@@ -112,7 +121,7 @@ function fillZoneFilter() {
   });
 }
 
-// ---------------- FILTER ----------------
+// ================= FILTER =================
 function applyFilters() {
 
   let zona = document.getElementById("zonaFilter").value;
@@ -122,8 +131,10 @@ function applyFilters() {
 
     let matchZona = (zona === "TODAS" || row.Zona === zona);
 
-    // 🔥 BUSQUEDA EN COLUMNA CALLE (D)
-    let matchCalle = !calle || (row.Calle || "").toUpperCase().includes(calle);
+    // 🔥 BUSCA EN COLUMNA REAL "CALLE"
+    let matchCalle =
+      !calle ||
+      getCol(row, "CALLE").toUpperCase().includes(calle);
 
     return matchZona && matchCalle;
   });
@@ -131,7 +142,7 @@ function applyFilters() {
   renderTable(filtered);
 }
 
-// ---------------- RENDER ----------------
+// ================= RENDER TABLE =================
 function renderTable(data) {
 
   if (!data.length) {
@@ -139,13 +150,13 @@ function renderTable(data) {
     return;
   }
 
-  // columnas a ocultar
+  // columnas ocultas
   const hiddenCols = ["N°", "Observaciones", "C1", "C2"];
-
-  let html = "<table><tr>";
 
   let headers = Object.keys(data[0])
     .filter(h => !hiddenCols.includes(h));
+
+  let html = "<table><tr>";
 
   headers.forEach(h => {
     html += `<th>${h}</th>`;
@@ -160,8 +171,8 @@ function renderTable(data) {
 
       let value = row[h] || "";
 
-      // 🔥 FOTO como link clickeable
-      if (h.toLowerCase().includes("foto") && value) {
+      // 🔥 FOTO COMO LINK
+      if (h.toUpperCase().includes("FOTO") && value) {
         value = `<a href="${value}" target="_blank">Ver</a>`;
       }
 
@@ -176,11 +187,11 @@ function renderTable(data) {
   document.getElementById("table").innerHTML = html;
 }
 
-// ---------------- EVENTS ----------------
+// ================= EVENTS =================
 document.getElementById("zonaFilter").addEventListener("change", applyFilters);
 document.getElementById("calleFilter").addEventListener("input", applyFilters);
 
-// ---------------- INIT ----------------
+// ================= INIT =================
 loadData();
 
 </script>
