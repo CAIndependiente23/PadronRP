@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Rejas Perimetrales</title>
+<title>REJAS PERIMETRALES</title>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
 
@@ -40,7 +40,7 @@ td {
   border-bottom: 1px solid #eee;
 }
 
-tr:hover { background: #eef5ff; }
+tr:hover { background: #eef5ff; cursor: pointer; }
 
 a {
   color: #2d6cdf;
@@ -100,6 +100,7 @@ const pageSize = 100;
 
 let map;
 let markersLayer;
+let markersByRP = {}; // 🔥 clave
 
 // ================= HELPERS =================
 function getCol(row, name) {
@@ -185,18 +186,17 @@ function renderTable() {
   }
 
   let hiddenCols = ["N°", "Observaciones", "C1", "C2"];
-
   let headers = Object.keys(pageData[0]).filter(h => !hiddenCols.includes(h));
 
   let html = "<table><tr>";
-
   headers.forEach(h => html += `<th>${h}</th>`);
-
   html += "</tr>";
 
   pageData.forEach(row => {
 
-    html += "<tr>";
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "";
+
+    html += `<tr onclick="irAMapa('${rp}')">`;
 
     headers.forEach(h => {
 
@@ -241,9 +241,7 @@ function initMap() {
 
   map = L.map('map').setView([-34.6037, -58.3816], 12);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
   markersLayer = L.layerGroup().addTo(map);
 }
@@ -251,6 +249,7 @@ function initMap() {
 function renderMap(data) {
 
   markersLayer.clearLayers();
+  markersByRP = {}; // 🔥 reset
 
   data.forEach(row => {
 
@@ -270,7 +269,6 @@ function renderMap(data) {
       <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
     `;
 
-    // 🔥 CAMBIO CLAVE (más liviano y más chico)
     let marker = L.circleMarker([lat, lng], {
       radius: 4,
       color: "#2d6cdf",
@@ -281,11 +279,27 @@ function renderMap(data) {
     marker.bindPopup(popup);
 
     markersLayer.addLayer(marker);
+
+    // 🔥 guardar referencia
+    markersByRP[rp] = marker;
   });
 
   if (markersLayer.getLayers().length > 0) {
     map.fitBounds(markersLayer.getBounds());
   }
+}
+
+// ================= INTERACCION =================
+function irAMapa(rp) {
+
+  let marker = markersByRP[rp];
+
+  if (!marker) return;
+
+  let latlng = marker.getLatLng();
+
+  map.setView(latlng, 18); // 🔥 zoom fuerte
+  marker.openPopup();
 }
 
 // ================= EVENTS =================
