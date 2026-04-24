@@ -5,34 +5,63 @@
 <title>REJAS PERIMETRALES</title>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
 body { font-family: Arial; margin: 20px; background: #f6f7fb; }
+h2 { margin-bottom: 10px; }
 
-.botones button {
-  margin: 5px;
-  padding: 6px 12px;
-  border: none;
-  background: #2d6cdf;
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
+.filters { margin-bottom: 15px; }
+
+select, input {
+  padding: 6px;
+  margin-right: 10px;
 }
-.botones button:hover { background: #1f4fb5; }
 
-#map { height: 500px; margin-bottom: 20px; border-radius: 10px; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  margin-top: 10px;
+}
 
-table { width: 100%; border-collapse: collapse; background: white; }
-th { background: #f1f3f6; padding: 10px; position: sticky; top: 0; }
-td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+th {
+  background: #f1f3f6;
+  position: sticky;
+  top: 0;
+  padding: 10px;
+}
+
+td {
+  padding: 8px;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}
 
 tr:hover { background: #eef5ff; cursor: pointer; }
 
-.filters { margin: 10px 0; }
+a {
+  color: #2d6cdf;
+  text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+#map {
+  height: 500px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+}
+
+.pagination { margin-top: 10px; }
+
+button {
+  margin: 2px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
 </style>
 </head>
 
@@ -40,59 +69,30 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
 <h2>REJAS PERIMETRALES</h2>
 
-<div class="botones">
-  <button onclick="cambiarVista('padron')">PADRON</button>
-  <button onclick="cambiarVista('2025')">2025</button>
-  <button onclick="cambiarVista('2026')">2026</button>
+<h3>Elementos</h3>
+<div id="map"></div>
+
+<div class="filters">
+  <label>Zona:</label>
+  <select id="zonaFilter">
+    <option value="TODAS">Todas</option>
+  </select>
+
+  <label>Buscar calle:</label>
+  <input type="text" id="calleFilter" placeholder="Ej: Corrientes">
+
+  <label>Buscar N°RP:</label>
+  <input type="text" id="rpFilter" placeholder="Ej: RP-Z1-123">
 </div>
 
-<!-- PADRON -->
-<div id="vistaPadron">
-  <div id="map"></div>
-
-  <div class="filters">
-    <label>Zona:</label>
-    <select id="zonaFilter">
-      <option value="TODAS">Todas</option>
-    </select>
-
-    <label>Buscar calle:</label>
-    <input type="text" id="calleFilter">
-
-    <label>Buscar N°RP:</label>
-    <input type="text" id="rpFilter">
-  </div>
-
-  <div id="table"></div>
-  <div id="pagination"></div>
-</div>
-
-<!-- ANALISIS -->
-<div id="vistaAnalisis" style="display:none;">
-  <h3 id="tituloAnalisis"></h3>
-  <div id="botonesMeses"></div>
-  <div id="tablaAnalisis"></div>
-
-  <div style="background:white; padding:20px; border-radius:10px; margin-top:20px;">
-    <canvas id="graficoAnalisis"></canvas>
-  </div>
-</div>
+<div id="table"></div>
+<div class="pagination" id="pagination"></div>
 
 <script>
 
-// CONFIG
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
-const URL_ANALISIS = "https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
+const SHEET_URL =
+"https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 
-const PLIEGO = {
-  "Zona 1": 8103,
-  "Zona 2": 1127,
-  "Zona 3": 3156,
-  "Zona 4": 3839,
-  "Zona 5": 581
-};
-
-// VARIABLES
 let dataGlobal = [];
 let filteredData = [];
 let currentPage = 1;
@@ -100,11 +100,7 @@ const pageSize = 100;
 
 let map;
 let markersLayer;
-let markersByRP = {};
-
-let dataAnalisis = [];
-let chartAnalisis = null;
-let anioActual = null;
+let markersByRP = {}; // 🔥 clave
 
 // ================= HELPERS =================
 function getCol(row, name) {
@@ -114,57 +110,9 @@ function getCol(row, name) {
   return key ? row[key] : "";
 }
 
-function parseFecha(fechaStr){
-  if(!fechaStr) return null;
-  let p = fechaStr.split("/");
-  if(p.length === 3){
-    return new Date(p[2], p[1]-1, p[0]);
-  }
-  let f = new Date(fechaStr);
-  return isNaN(f) ? null : f;
-}
-
-// 🔥 FIX REAL
-function parseNumeroSeguro(valor){
-  if(!valor) return 0;
-
-  let v = valor.toString().trim();
-
-  if(v.includes(",") && v.includes(".")){
-    v = v.replace(/\./g, "").replace(",", ".");
-  } else if(v.includes(",")){
-    v = v.replace(",", ".");
-  }
-
-  return parseFloat(v) || 0;
-}
-
-// ================= VISTAS =================
-function cambiarVista(vista){
-
-  document.getElementById("vistaPadron").style.display =
-    (vista === "padron") ? "block" : "none";
-
-  document.getElementById("vistaAnalisis").style.display =
-    (vista !== "padron") ? "block" : "none";
-
-  if(vista !== "padron"){
-    anioActual = vista;
-    cargarAnalisis();
-  }
-
-  if(vista === "padron"){
-    setTimeout(() => {
-      if(map){
-        map.invalidateSize();
-        renderMap(filteredData);
-      }
-    }, 200);
-  }
-}
-
-// ================= LOAD PADRON =================
+// ================= LOAD =================
 function loadData() {
+
   Papa.parse(SHEET_URL, {
     download: true,
     header: true,
@@ -172,140 +120,195 @@ function loadData() {
     complete: function(results) {
 
       dataGlobal = results.data;
+
       fillZoneFilter();
       filteredData = dataGlobal;
 
       initMap();
-      renderAll();
+      renderTable();
+      renderPagination();
+      renderMap(filteredData);
     }
   });
 }
 
-// ================= ANALISIS =================
-function cargarAnalisis(){
+// ================= ZONAS =================
+function fillZoneFilter() {
 
-  if(dataAnalisis.length === 0){
-    Papa.parse(URL_ANALISIS, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results){
-        dataAnalisis = results.data;
-        crearBotonesMeses();
-      }
-    });
-  } else {
-    crearBotonesMeses();
-  }
-}
+  let select = document.getElementById("zonaFilter");
 
-function crearBotonesMeses(){
-
-  let cont = document.getElementById("botonesMeses");
-  cont.innerHTML = "";
-
-  let mesesSet = new Set();
-
-  dataAnalisis.forEach(r => {
-    let f = parseFecha(getCol(r,"FECHA"));
-    if(!f) return;
-    if(f.getFullYear().toString() !== anioActual) return;
-    mesesSet.add(f.getMonth());
-  });
-
-  const nombres = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
-
-  [...mesesSet].sort((a,b)=>a-b).forEach(m => {
-    let b = document.createElement("button");
-    b.innerText = nombres[m];
-    b.onclick = () => generarGraficoMes(m);
-    cont.appendChild(b);
-  });
-
-  document.getElementById("tituloAnalisis").innerText = "AÑO " + anioActual;
-}
-
-function generarGraficoMes(mes){
-
-  let zonas = Object.keys(PLIEGO);
-  let acumulado = {};
-  zonas.forEach(z => acumulado[z] = 0);
-
-  dataAnalisis.forEach(r => {
-
-    let f = parseFecha(getCol(r,"FECHA"));
-    if(!f) return;
-
-    if(f.getFullYear().toString() !== anioActual) return;
-    if(f.getMonth() !== mes) return;
-
-    let z = getCol(r,"ZONA");
-    let l = parseNumeroSeguro(getCol(r,"L(m)"));
-
-    if(z && acumulado[z] !== undefined){
-      acumulado[z] += l;
-    }
-  });
-
-  renderTablaAnalisis(zonas, acumulado);
-  renderGrafico(zonas, acumulado, mes);
-}
-
-function renderTablaAnalisis(zonas, data){
-
-  let html = `<table>
-    <tr>
-      <th>Zona</th>
-      <th>ML</th>
-      <th>Pliego</th>
-      <th>Pendientes</th>
-    </tr>`;
+  let zonas = [...new Set(dataGlobal.map(r => r.Zona).filter(Boolean))];
 
   zonas.forEach(z => {
-    let ml = data[z] || 0;
-    let pl = PLIEGO[z] || 0;
-    let pend = pl - ml;
-
-    html += `<tr>
-      <td>${z}</td>
-      <td>${ml.toFixed(0)}</td>
-      <td>${pl}</td>
-      <td>${pend.toFixed(0)}</td>
-    </tr>`;
-  });
-
-  html += `</table>`;
-  document.getElementById("tablaAnalisis").innerHTML = html;
-}
-
-function renderGrafico(zonas, data, mes){
-
-  if(chartAnalisis) chartAnalisis.destroy();
-
-  const nombresMes = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
-
-  chartAnalisis = new Chart(document.getElementById("graficoAnalisis"), {
-    type: "bar",
-    data: {
-      labels: zonas,
-      datasets: [{
-        label: nombresMes[mes],
-        data: zonas.map(z => data[z])
-      }]
-    }
+    let opt = document.createElement("option");
+    opt.value = z;
+    opt.textContent = z;
+    select.appendChild(opt);
   });
 }
 
-// ================= PADRON =================
-function renderAll(){
+// ================= FILTER =================
+function applyFilters() {
+
+  let zona = document.getElementById("zonaFilter").value;
+  let calle = document.getElementById("calleFilter").value.toUpperCase();
+  let rpSearch = document.getElementById("rpFilter").value.toUpperCase();
+
+  filteredData = dataGlobal.filter(row => {
+
+    let matchZona = (zona === "TODAS" || row.Zona === zona);
+
+    let calleVal = getCol(row, "CALLE").toUpperCase();
+    let matchCalle = !calle || calleVal.includes(calle);
+
+    let rpVal = (getCol(row, "N°RP") || getCol(row, "RP")).toUpperCase();
+    let matchRP = !rpSearch || rpVal.includes(rpSearch);
+
+    return matchZona && matchCalle && matchRP;
+  });
+
+  currentPage = 1;
+
   renderTable();
   renderPagination();
   renderMap(filteredData);
 }
 
-// INIT
+// ================= TABLE =================
+function renderTable() {
+
+  let start = (currentPage - 1) * pageSize;
+  let pageData = filteredData.slice(start, start + pageSize);
+
+  if (!pageData.length) {
+    document.getElementById("table").innerHTML = "<p>No hay resultados</p>";
+    return;
+  }
+
+  let hiddenCols = ["N°", "Observaciones", "C1", "C2"];
+  let headers = Object.keys(pageData[0]).filter(h => !hiddenCols.includes(h));
+
+  let html = "<table><tr>";
+  headers.forEach(h => html += `<th>${h}</th>`);
+  html += "</tr>";
+
+  pageData.forEach(row => {
+
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "";
+
+    html += `<tr onclick="irAMapa('${rp}')">`;
+
+    headers.forEach(h => {
+
+      let value = row[h] || "";
+
+      if (h.toUpperCase().includes("FOTO") && value) {
+        value = `<a href="${value}" target="_blank">Ver</a>`;
+      }
+
+      html += `<td>${value}</td>`;
+    });
+
+    html += "</tr>";
+  });
+
+  html += "</table>";
+
+  document.getElementById("table").innerHTML = html;
+}
+
+// ================= PAGINATION =================
+function renderPagination() {
+
+  let totalPages = Math.ceil(filteredData.length / pageSize);
+
+  let html = "";
+
+  for (let i = 1; i <= totalPages; i++) {
+    html += `<button onclick="goPage(${i})">${i}</button>`;
+  }
+
+  document.getElementById("pagination").innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderTable();
+}
+
+// ================= MAP =================
+function initMap() {
+
+  map = L.map('map').setView([-34.6037, -58.3816], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+function renderMap(data) {
+
+  markersLayer.clearLayers();
+  markersByRP = {}; // 🔥 reset
+
+  data.forEach(row => {
+
+    if (!row.C1) return;
+
+    let coords = row.C1.split(",");
+    let lat = parseFloat(coords[0]);
+    let lng = parseFloat(coords[1]);
+
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "-";
+
+    let popup = `
+      <b>${rp}</b><br>
+      ${row.Calle || ""}<br>
+      <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
+    `;
+
+    let marker = L.circleMarker([lat, lng], {
+      radius: 4,
+      color: "#2d6cdf",
+      weight: 1,
+      fillOpacity: 0.8
+    });
+
+    marker.bindPopup(popup);
+
+    markersLayer.addLayer(marker);
+
+    // 🔥 guardar referencia
+    markersByRP[rp] = marker;
+  });
+
+  if (markersLayer.getLayers().length > 0) {
+    map.fitBounds(markersLayer.getBounds());
+  }
+}
+
+// ================= INTERACCION =================
+function irAMapa(rp) {
+
+  let marker = markersByRP[rp];
+
+  if (!marker) return;
+
+  let latlng = marker.getLatLng();
+
+  map.setView(latlng, 18); // 🔥 zoom fuerte
+  marker.openPopup();
+}
+
+// ================= EVENTS =================
+document.getElementById("zonaFilter").addEventListener("change", applyFilters);
+document.getElementById("calleFilter").addEventListener("input", applyFilters);
+document.getElementById("rpFilter").addEventListener("input", applyFilters);
+
+// ================= INIT =================
 loadData();
-cambiarVista("padron");
 
 </script>
 
