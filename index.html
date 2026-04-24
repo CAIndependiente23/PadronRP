@@ -106,7 +106,7 @@ let dataAnalisis = [];
 let chartAnalisis = null;
 let anioActual = null;
 
-// HELPERS
+// ================= HELPERS =================
 function getCol(row, name) {
   let key = Object.keys(row).find(k =>
     k.trim().toUpperCase() === name.trim().toUpperCase()
@@ -116,28 +116,30 @@ function getCol(row, name) {
 
 function parseFecha(fechaStr){
   if(!fechaStr) return null;
-
   let p = fechaStr.split("/");
   if(p.length === 3){
     return new Date(p[2], p[1]-1, p[0]);
   }
-
   let f = new Date(fechaStr);
   return isNaN(f) ? null : f;
 }
 
-// 🔥 FIX NUMEROS
-function parseNumero(valor){
+// 🔥 FIX REAL
+function parseNumeroSeguro(valor){
   if(!valor) return 0;
 
-  return parseFloat(
-    valor.toString()
-      .replace(/\./g, "")
-      .replace(",", ".")
-  ) || 0;
+  let v = valor.toString().trim();
+
+  if(v.includes(",") && v.includes(".")){
+    v = v.replace(/\./g, "").replace(",", ".");
+  } else if(v.includes(",")){
+    v = v.replace(",", ".");
+  }
+
+  return parseFloat(v) || 0;
 }
 
-// VISTAS
+// ================= VISTAS =================
 function cambiarVista(vista){
 
   document.getElementById("vistaPadron").style.display =
@@ -161,7 +163,7 @@ function cambiarVista(vista){
   }
 }
 
-// LOAD PADRON
+// ================= LOAD PADRON =================
 function loadData() {
   Papa.parse(SHEET_URL, {
     download: true,
@@ -179,7 +181,7 @@ function loadData() {
   });
 }
 
-// ANALISIS
+// ================= ANALISIS =================
 function cargarAnalisis(){
 
   if(dataAnalisis.length === 0){
@@ -238,7 +240,7 @@ function generarGraficoMes(mes){
     if(f.getMonth() !== mes) return;
 
     let z = getCol(r,"ZONA");
-    let l = parseNumero(getCol(r,"L(m)"));
+    let l = parseNumeroSeguro(getCol(r,"L(m)"));
 
     if(z && acumulado[z] !== undefined){
       acumulado[z] += l;
@@ -294,7 +296,7 @@ function renderGrafico(zonas, data, mes){
   });
 }
 
-// PADRON (igual que antes)
+// ================= PADRON =================
 function renderAll(){
   renderTable();
   renderPagination();
