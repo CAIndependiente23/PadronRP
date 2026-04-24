@@ -16,20 +16,19 @@ body { font-family: Arial; margin: 20px; background: #f6f7fb; }
 .botones button {
   margin: 5px;
   padding: 6px 12px;
-  cursor: pointer;
   border: none;
   background: #2d6cdf;
   color: white;
   border-radius: 6px;
+  cursor: pointer;
 }
 .botones button:hover { background: #1f4fb5; }
 
 #map { height: 500px; margin-bottom: 20px; border-radius: 10px; }
 
 table { width: 100%; border-collapse: collapse; background: white; }
-th { background: #f1f3f6; position: sticky; top: 0; padding: 10px; }
+th { background: #f1f3f6; padding: 10px; position: sticky; top: 0; }
 td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
-
 tr:hover { background: #eef5ff; cursor: pointer; }
 
 .filters { margin: 10px 0; }
@@ -73,7 +72,6 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 <div id="vistaAnalisis" style="display:none;">
 
   <h3 id="tituloAnalisis"></h3>
-
   <div id="botonesMeses" style="margin-bottom:15px;"></div>
 
   <div style="background:white; padding:20px; border-radius:10px;">
@@ -85,11 +83,8 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 <script>
 
 // ================= CONFIG =================
-const SHEET_URL =
-"https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
-
-const URL_ANALISIS =
-"https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
+const URL_ANALISIS = "https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
 
 // ================= VARIABLES =================
 let dataGlobal = [];
@@ -118,6 +113,16 @@ function cambiarVista(vista){
     anioActual = vista;
     cargarAnalisis();
   }
+
+  // 🔥 FIX MAPA
+  if(vista === "padron"){
+    setTimeout(() => {
+      if(map){
+        map.invalidateSize();
+        renderMap(filteredData);
+      }
+    }, 200);
+  }
 }
 
 // ================= HELPERS =================
@@ -129,24 +134,17 @@ function getCol(row, name) {
 }
 
 function parseFecha(fechaStr){
-
   if(!fechaStr) return null;
-
-  // dd/mm/yyyy
   let p = fechaStr.split("/");
   if(p.length === 3){
     return new Date(p[2], p[1]-1, p[0]);
   }
-
   let f = new Date(fechaStr);
-  if(!isNaN(f)) return f;
-
-  return null;
+  return isNaN(f) ? null : f;
 }
 
 // ================= LOAD PADRON =================
 function loadData() {
-
   Papa.parse(SHEET_URL, {
     download: true,
     header: true,
@@ -154,7 +152,6 @@ function loadData() {
     complete: function(results) {
 
       dataGlobal = results.data;
-
       fillZoneFilter();
       filteredData = dataGlobal;
 
@@ -168,18 +165,15 @@ function loadData() {
 function cargarAnalisis(){
 
   if(dataAnalisis.length === 0){
-
     Papa.parse(URL_ANALISIS, {
       download: true,
       header: true,
       skipEmptyLines: true,
       complete: function(results){
-
         dataAnalisis = results.data;
         crearBotonesMeses();
       }
     });
-
   } else {
     crearBotonesMeses();
   }
@@ -193,26 +187,18 @@ function crearBotonesMeses(){
   let mesesSet = new Set();
 
   dataAnalisis.forEach(r => {
-
     let f = parseFecha(r.FECHA);
     if(!f) return;
-
     if(f.getFullYear().toString() !== anioActual) return;
-
     mesesSet.add(f.getMonth());
   });
 
-  let meses = [...mesesSet].sort((a,b)=>a-b);
-
   const nombres = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
 
-  meses.forEach(m => {
-
+  [...mesesSet].sort((a,b)=>a-b).forEach(m => {
     let b = document.createElement("button");
     b.innerText = nombres[m];
-
     b.onclick = () => generarGraficoMes(m);
-
     cont.appendChild(b);
   });
 
@@ -222,15 +208,12 @@ function crearBotonesMeses(){
 function generarGraficoMes(mes){
 
   let zonas = [...new Set(dataAnalisis.map(r => r.ZONA).filter(Boolean))];
-
   let acumulado = {};
   zonas.forEach(z => acumulado[z] = 0);
 
   dataAnalisis.forEach(r => {
-
     let f = parseFecha(r.FECHA);
     if(!f) return;
-
     if(f.getFullYear().toString() !== anioActual) return;
     if(f.getMonth() !== mes) return;
 
@@ -272,11 +255,8 @@ function renderAll(){
 }
 
 function fillZoneFilter() {
-
   let select = document.getElementById("zonaFilter");
-
   let zonas = [...new Set(dataGlobal.map(r => r.Zona).filter(Boolean))];
-
   zonas.forEach(z => {
     let opt = document.createElement("option");
     opt.value = z;
@@ -294,7 +274,6 @@ function applyFilters() {
   filteredData = dataGlobal.filter(row => {
 
     let matchZona = (zona === "TODAS" || row.Zona === zona);
-
     let calleVal = getCol(row, "CALLE").toUpperCase();
     let matchCalle = !calle || calleVal.includes(calle);
 
@@ -324,16 +303,13 @@ function renderTable() {
   pageData.forEach(row => {
 
     let rp = getCol(row, "N°RP") || getCol(row, "RP") || "";
-
     html += `<tr onclick="irAMapa('${rp}')">`;
 
     headers.forEach(h => {
       let value = row[h] || "";
-
       if (h.toUpperCase().includes("FOTO") && value) {
         value = `<a href="${value}" target="_blank">Ver</a>`;
       }
-
       html += `<td>${value}</td>`;
     });
 
@@ -341,7 +317,6 @@ function renderTable() {
   });
 
   html += "</table>";
-
   document.getElementById("table").innerHTML = html;
 }
 
@@ -388,7 +363,7 @@ function renderMap(data) {
   }
 }
 
-// ================= INTERACCION =================
+// ================= CLICK =================
 function irAMapa(rp) {
 
   let marker = markersByRP[rp];
