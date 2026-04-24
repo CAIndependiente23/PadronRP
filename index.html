@@ -24,30 +24,11 @@ body { font-family: Arial; margin: 20px; background: #f6f7fb; }
 }
 .botones button:hover { background: #1f4fb5; }
 
-#map {
-  height: 500px;
-  margin-bottom: 20px;
-  border-radius: 10px;
-}
+#map { height: 500px; margin-bottom: 20px; border-radius: 10px; }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
-th {
-  background: #f1f3f6;
-  position: sticky;
-  top: 0;
-  padding: 10px;
-}
-
-td {
-  padding: 8px;
-  text-align: center;
-  border-bottom: 1px solid #eee;
-}
+table { width: 100%; border-collapse: collapse; background: white; }
+th { background: #f1f3f6; position: sticky; top: 0; padding: 10px; }
+td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
 
 tr:hover { background: #eef5ff; cursor: pointer; }
 
@@ -93,6 +74,8 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
   <h3 id="tituloAnalisis"></h3>
 
+  <div id="botonesMeses" style="margin-bottom:15px;"></div>
+
   <div style="background:white; padding:20px; border-radius:10px;">
     <canvas id="graficoAnalisis"></canvas>
   </div>
@@ -120,6 +103,7 @@ let markersByRP = {};
 
 let dataAnalisis = [];
 let chartAnalisis = null;
+let anioActual = null;
 
 // ================= VISTAS =================
 function cambiarVista(vista){
@@ -131,7 +115,8 @@ function cambiarVista(vista){
     (vista !== "padron") ? "block" : "none";
 
   if(vista !== "padron"){
-    cargarAnalisis(vista);
+    anioActual = vista;
+    cargarAnalisis();
   }
 }
 
@@ -141,6 +126,22 @@ function getCol(row, name) {
     k.trim().toUpperCase() === name.trim().toUpperCase()
   );
   return key ? row[key] : "";
+}
+
+function parseFecha(fechaStr){
+
+  if(!fechaStr) return null;
+
+  // dd/mm/yyyy
+  let p = fechaStr.split("/");
+  if(p.length === 3){
+    return new Date(p[2], p[1]-1, p[0]);
+  }
+
+  let f = new Date(fechaStr);
+  if(!isNaN(f)) return f;
+
+  return null;
 }
 
 // ================= LOAD PADRON =================
@@ -164,80 +165,101 @@ function loadData() {
 }
 
 // ================= ANALISIS =================
-function cargarAnalisis(anio){
+function cargarAnalisis(){
 
   if(dataAnalisis.length === 0){
 
     Papa.parse(URL_ANALISIS, {
       download: true,
       header: true,
+      skipEmptyLines: true,
       complete: function(results){
 
         dataAnalisis = results.data;
-        procesarAnalisis(anio);
+        crearBotonesMeses();
       }
     });
 
   } else {
-    procesarAnalisis(anio);
+    crearBotonesMeses();
   }
 }
 
-function procesarAnalisis(anio){
+function crearBotonesMeses(){
 
-  document.getElementById("tituloAnalisis").innerText = "AÑO " + anio;
+  let cont = document.getElementById("botonesMeses");
+  cont.innerHTML = "";
 
-  let meses = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
-
-  let zonas = [...new Set(dataAnalisis.map(r => r.ZONA).filter(Boolean))];
-
-  let estructura = {};
-
-  meses.forEach(m => {
-    estructura[m] = {};
-    zonas.forEach(z => estructura[m][z] = 0);
-  });
+  let mesesSet = new Set();
 
   dataAnalisis.forEach(r => {
 
-    let zona = r.ZONA;
-    let l = parseFloat((r["L(m)"] || "0").replace(",", ".")) || 0;
+    let f = parseFecha(r.FECHA);
+    if(!f) return;
 
-    let fecha = (r.FECHA || r.MES || "").toString().toUpperCase();
+    if(f.getFullYear().toString() !== anioActual) return;
 
-    let mes = meses.find(m => fecha.includes(m));
-    let okAnio = fecha.includes(anio);
-
-    if(!zona || !mes || !okAnio) return;
-
-    estructura[mes][zona] += l;
+    mesesSet.add(f.getMonth());
   });
 
-  renderGraficoAnalisis(meses, zonas, estructura);
+  let meses = [...mesesSet].sort((a,b)=>a-b);
+
+  const nombres = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+
+  meses.forEach(m => {
+
+    let b = document.createElement("button");
+    b.innerText = nombres[m];
+
+    b.onclick = () => generarGraficoMes(m);
+
+    cont.appendChild(b);
+  });
+
+  document.getElementById("tituloAnalisis").innerText = "AÑO " + anioActual;
 }
 
-function renderGraficoAnalisis(meses, zonas, estructura){
+function generarGraficoMes(mes){
+
+  let zonas = [...new Set(dataAnalisis.map(r => r.ZONA).filter(Boolean))];
+
+  let acumulado = {};
+  zonas.forEach(z => acumulado[z] = 0);
+
+  dataAnalisis.forEach(r => {
+
+    let f = parseFecha(r.FECHA);
+    if(!f) return;
+
+    if(f.getFullYear().toString() !== anioActual) return;
+    if(f.getMonth() !== mes) return;
+
+    let z = r.ZONA;
+    let l = parseFloat((r["L(m)"] || "0").replace(",", ".")) || 0;
+
+    if(z) acumulado[z] += l;
+  });
+
+  renderGrafico(zonas, acumulado, mes);
+}
+
+function renderGrafico(zonas, data, mes){
 
   if(chartAnalisis) chartAnalisis.destroy();
 
-  let datasets = zonas.map(z => ({
-    label: z,
-    data: meses.map(m => estructura[m][z]),
-    borderWidth: 2,
-    fill: false
-  }));
+  const nombresMes = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
 
   chartAnalisis = new Chart(document.getElementById("graficoAnalisis"), {
-    type: "line",
+    type: "bar",
     data: {
-      labels: meses,
-      datasets: datasets
+      labels: zonas,
+      datasets: [{
+        label: nombresMes[mes],
+        data: zonas.map(z => data[z])
+      }]
     },
     options: {
-      responsive: true,
-      plugins: {
-        legend: { position: "bottom" }
-      }
+      plugins: { legend: { display: false } }
     }
   });
 }
@@ -323,25 +345,6 @@ function renderTable() {
   document.getElementById("table").innerHTML = html;
 }
 
-// ================= PAGINATION =================
-function renderPagination() {
-
-  let totalPages = Math.ceil(filteredData.length / pageSize);
-
-  let html = "";
-
-  for (let i = 1; i <= totalPages; i++) {
-    html += `<button onclick="goPage(${i})">${i}</button>`;
-  }
-
-  document.getElementById("pagination").innerHTML = html;
-}
-
-function goPage(p) {
-  currentPage = p;
-  renderTable();
-}
-
 // ================= MAP =================
 function initMap() {
 
@@ -392,7 +395,6 @@ function irAMapa(rp) {
   if (!marker) return;
 
   let latlng = marker.getLatLng();
-
   map.setView(latlng, 18);
   marker.openPopup();
 }
