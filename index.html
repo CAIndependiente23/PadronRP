@@ -46,7 +46,7 @@ tr:hover { background: #eef5ff; cursor: pointer; }
   <button onclick="cambiarVista('2026')">2026</button>
 </div>
 
-<!-- ================= PADRON ================= -->
+<!-- PADRON -->
 <div id="vistaPadron">
 
   <div id="map"></div>
@@ -69,7 +69,7 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
 </div>
 
-<!-- ================= ANALISIS ================= -->
+<!-- ANALISIS -->
 <div id="vistaAnalisis" style="display:none;">
 
   <h3 id="tituloAnalisis"></h3>
@@ -86,7 +86,7 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
 <script>
 
-// ================= CONFIG =================
+// CONFIG
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 const URL_ANALISIS = "https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
 
@@ -98,7 +98,7 @@ const PLIEGO = {
   "Zona 5": 581
 };
 
-// ================= VARIABLES =================
+// VARIABLES
 let dataGlobal = [];
 let filteredData = [];
 let currentPage = 1;
@@ -112,7 +112,7 @@ let dataAnalisis = [];
 let chartAnalisis = null;
 let anioActual = null;
 
-// ================= VISTAS =================
+// VISTAS
 function cambiarVista(vista){
 
   document.getElementById("vistaPadron").style.display =
@@ -136,7 +136,7 @@ function cambiarVista(vista){
   }
 }
 
-// ================= HELPERS =================
+// HELPERS
 function getCol(row, name) {
   let key = Object.keys(row).find(k =>
     k.trim().toUpperCase() === name.trim().toUpperCase()
@@ -154,7 +154,7 @@ function parseFecha(fechaStr){
   return isNaN(f) ? null : f;
 }
 
-// ================= LOAD PADRON =================
+// LOAD PADRON
 function loadData() {
   Papa.parse(SHEET_URL, {
     download: true,
@@ -172,7 +172,7 @@ function loadData() {
   });
 }
 
-// ================= ANALISIS =================
+// ANALISIS
 function cargarAnalisis(){
 
   if(dataAnalisis.length === 0){
@@ -198,7 +198,7 @@ function crearBotonesMeses(){
   let mesesSet = new Set();
 
   dataAnalisis.forEach(r => {
-    let f = parseFecha(r.FECHA);
+    let f = parseFecha(getCol(r, "FECHA"));
     if(!f) return;
     if(f.getFullYear().toString() !== anioActual) return;
     mesesSet.add(f.getMonth());
@@ -224,14 +224,14 @@ function generarGraficoMes(mes){
 
   dataAnalisis.forEach(r => {
 
-    let f = parseFecha(r.FECHA);
+    let f = parseFecha(getCol(r, "FECHA"));
     if(!f) return;
 
     if(f.getFullYear().toString() !== anioActual) return;
     if(f.getMonth() !== mes) return;
 
-    let z = r.ZONA;
-    let l = parseFloat((r["L(m)"] || "0").replace(",", ".")) || 0;
+    let z = getCol(r, "ZONA");
+    let l = parseFloat((getCol(r, "L(m)") || "0").replace(",", ".")) || 0;
 
     if(z && acumulado[z] !== undefined){
       acumulado[z] += l;
@@ -291,7 +291,7 @@ function renderGrafico(zonas, data, mes){
   });
 }
 
-// ================= PADRON =================
+// PADRON
 function renderAll(){
   renderTable();
   renderPagination();
@@ -331,7 +331,7 @@ function applyFilters() {
   renderAll();
 }
 
-// ================= TABLE =================
+// TABLE
 function renderTable() {
 
   let start = (currentPage - 1) * pageSize;
@@ -364,7 +364,7 @@ function renderTable() {
   document.getElementById("table").innerHTML = html;
 }
 
-// ================= MAP =================
+// MAP
 function initMap() {
 
   map = L.map('map').setView([-34.6037, -58.3816], 12);
@@ -407,9 +407,8 @@ function renderMap(data) {
   }
 }
 
-// ================= CLICK =================
+// CLICK
 function irAMapa(rp) {
-
   let marker = markersByRP[rp];
   if (!marker) return;
 
@@ -418,12 +417,12 @@ function irAMapa(rp) {
   marker.openPopup();
 }
 
-// ================= EVENTS =================
+// EVENTS
 document.getElementById("zonaFilter").addEventListener("change", applyFilters);
 document.getElementById("calleFilter").addEventListener("input", applyFilters);
 document.getElementById("rpFilter").addEventListener("input", applyFilters);
 
-// ================= INIT =================
+// INIT
 loadData();
 cambiarVista("padron");
 
