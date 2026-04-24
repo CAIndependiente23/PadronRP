@@ -5,6 +5,7 @@
 <title>REJAS PERIMETRALES</title>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +22,6 @@ body { font-family: Arial; margin: 20px; background: #f6f7fb; }
   color: white;
   border-radius: 6px;
 }
-
 .botones button:hover { background: #1f4fb5; }
 
 #map {
@@ -61,6 +61,8 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
 <div class="botones">
   <button onclick="cambiarVista('padron')">PADRON</button>
+  <button onclick="cambiarVista('2025')">2025</button>
+  <button onclick="cambiarVista('2026')">2026</button>
 </div>
 
 <!-- ================= PADRON ================= -->
@@ -86,11 +88,27 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 
 </div>
 
+<!-- ================= ANALISIS ================= -->
+<div id="vistaAnalisis" style="display:none;">
+
+  <h3 id="tituloAnalisis"></h3>
+
+  <div style="background:white; padding:20px; border-radius:10px;">
+    <canvas id="graficoAnalisis"></canvas>
+  </div>
+
+</div>
+
 <script>
 
+// ================= CONFIG =================
 const SHEET_URL =
 "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 
+const URL_ANALISIS =
+"https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
+
+// ================= VARIABLES =================
 let dataGlobal = [];
 let filteredData = [];
 let currentPage = 1;
@@ -100,11 +118,21 @@ let map;
 let markersLayer;
 let markersByRP = {};
 
+let dataAnalisis = [];
+let chartAnalisis = null;
+
 // ================= VISTAS =================
 function cambiarVista(vista){
 
   document.getElementById("vistaPadron").style.display =
     (vista === "padron") ? "block" : "none";
+
+  document.getElementById("vistaAnalisis").style.display =
+    (vista !== "padron") ? "block" : "none";
+
+  if(vista !== "padron"){
+    cargarAnalisis(vista);
+  }
 }
 
 // ================= HELPERS =================
@@ -115,7 +143,7 @@ function getCol(row, name) {
   return key ? row[key] : "";
 }
 
-// ================= LOAD =================
+// ================= LOAD PADRON =================
 function loadData() {
 
   Papa.parse(SHEET_URL, {
@@ -135,14 +163,92 @@ function loadData() {
   });
 }
 
-// ================= RENDER ALL =================
+// ================= ANALISIS =================
+function cargarAnalisis(anio){
+
+  if(dataAnalisis.length === 0){
+
+    Papa.parse(URL_ANALISIS, {
+      download: true,
+      header: true,
+      complete: function(results){
+
+        dataAnalisis = results.data;
+        procesarAnalisis(anio);
+      }
+    });
+
+  } else {
+    procesarAnalisis(anio);
+  }
+}
+
+function procesarAnalisis(anio){
+
+  document.getElementById("tituloAnalisis").innerText = "AÑO " + anio;
+
+  let meses = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+
+  let zonas = [...new Set(dataAnalisis.map(r => r.ZONA).filter(Boolean))];
+
+  let estructura = {};
+
+  meses.forEach(m => {
+    estructura[m] = {};
+    zonas.forEach(z => estructura[m][z] = 0);
+  });
+
+  dataAnalisis.forEach(r => {
+
+    let zona = r.ZONA;
+    let l = parseFloat((r["L(m)"] || "0").replace(",", ".")) || 0;
+
+    let fecha = (r.FECHA || r.MES || "").toString().toUpperCase();
+
+    let mes = meses.find(m => fecha.includes(m));
+    let okAnio = fecha.includes(anio);
+
+    if(!zona || !mes || !okAnio) return;
+
+    estructura[mes][zona] += l;
+  });
+
+  renderGraficoAnalisis(meses, zonas, estructura);
+}
+
+function renderGraficoAnalisis(meses, zonas, estructura){
+
+  if(chartAnalisis) chartAnalisis.destroy();
+
+  let datasets = zonas.map(z => ({
+    label: z,
+    data: meses.map(m => estructura[m][z]),
+    borderWidth: 2,
+    fill: false
+  }));
+
+  chartAnalisis = new Chart(document.getElementById("graficoAnalisis"), {
+    type: "line",
+    data: {
+      labels: meses,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "bottom" }
+      }
+    }
+  });
+}
+
+// ================= PADRON =================
 function renderAll(){
   renderTable();
   renderPagination();
   renderMap(filteredData);
 }
 
-// ================= ZONAS =================
 function fillZoneFilter() {
 
   let select = document.getElementById("zonaFilter");
@@ -157,7 +263,6 @@ function fillZoneFilter() {
   });
 }
 
-// ================= FILTER =================
 function applyFilters() {
 
   let zona = document.getElementById("zonaFilter").value;
@@ -299,8 +404,6 @@ document.getElementById("rpFilter").addEventListener("input", applyFilters);
 
 // ================= INIT =================
 loadData();
-
-// 🔥 iniciar en PADRON
 cambiarVista("padron");
 
 </script>
