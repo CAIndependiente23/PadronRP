@@ -11,20 +11,29 @@
 
 <style>
 body { font-family: Arial; margin: 20px; background: #f6f7fb; }
-h2 { margin-bottom: 10px; }
 
-.filters { margin-bottom: 15px; }
+.botones button {
+  margin: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border: none;
+  background: #2d6cdf;
+  color: white;
+  border-radius: 6px;
+}
 
-select, input {
-  padding: 6px;
-  margin-right: 10px;
+.botones button:hover { background: #1f4fb5; }
+
+#map {
+  height: 500px;
+  margin-bottom: 20px;
+  border-radius: 10px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   background: white;
-  margin-top: 10px;
 }
 
 th {
@@ -42,26 +51,7 @@ td {
 
 tr:hover { background: #eef5ff; cursor: pointer; }
 
-a {
-  color: #2d6cdf;
-  text-decoration: none;
-}
-
-a:hover { text-decoration: underline; }
-
-#map {
-  height: 500px;
-  margin-bottom: 20px;
-  border-radius: 10px;
-}
-
-.pagination { margin-top: 10px; }
-
-button {
-  margin: 2px;
-  padding: 5px 10px;
-  cursor: pointer;
-}
+.filters { margin: 10px 0; }
 </style>
 </head>
 
@@ -69,24 +59,32 @@ button {
 
 <h2>REJAS PERIMETRALES</h2>
 
-<h3>Elementos</h3>
-<div id="map"></div>
-
-<div class="filters">
-  <label>Zona:</label>
-  <select id="zonaFilter">
-    <option value="TODAS">Todas</option>
-  </select>
-
-  <label>Buscar calle:</label>
-  <input type="text" id="calleFilter" placeholder="Ej: Corrientes">
-
-  <label>Buscar N°RP:</label>
-  <input type="text" id="rpFilter" placeholder="Ej: RP-Z1-123">
+<div class="botones">
+  <button onclick="cambiarVista('padron')">PADRON</button>
 </div>
 
-<div id="table"></div>
-<div class="pagination" id="pagination"></div>
+<!-- ================= PADRON ================= -->
+<div id="vistaPadron">
+
+  <div id="map"></div>
+
+  <div class="filters">
+    <label>Zona:</label>
+    <select id="zonaFilter">
+      <option value="TODAS">Todas</option>
+    </select>
+
+    <label>Buscar calle:</label>
+    <input type="text" id="calleFilter">
+
+    <label>Buscar N°RP:</label>
+    <input type="text" id="rpFilter">
+  </div>
+
+  <div id="table"></div>
+  <div id="pagination"></div>
+
+</div>
 
 <script>
 
@@ -100,7 +98,14 @@ const pageSize = 100;
 
 let map;
 let markersLayer;
-let markersByRP = {}; // 🔥 clave
+let markersByRP = {};
+
+// ================= VISTAS =================
+function cambiarVista(vista){
+
+  document.getElementById("vistaPadron").style.display =
+    (vista === "padron") ? "block" : "none";
+}
 
 // ================= HELPERS =================
 function getCol(row, name) {
@@ -125,11 +130,16 @@ function loadData() {
       filteredData = dataGlobal;
 
       initMap();
-      renderTable();
-      renderPagination();
-      renderMap(filteredData);
+      renderAll();
     }
   });
+}
+
+// ================= RENDER ALL =================
+function renderAll(){
+  renderTable();
+  renderPagination();
+  renderMap(filteredData);
 }
 
 // ================= ZONAS =================
@@ -168,10 +178,7 @@ function applyFilters() {
   });
 
   currentPage = 1;
-
-  renderTable();
-  renderPagination();
-  renderMap(filteredData);
+  renderAll();
 }
 
 // ================= TABLE =================
@@ -180,13 +187,8 @@ function renderTable() {
   let start = (currentPage - 1) * pageSize;
   let pageData = filteredData.slice(start, start + pageSize);
 
-  if (!pageData.length) {
-    document.getElementById("table").innerHTML = "<p>No hay resultados</p>";
-    return;
-  }
-
   let hiddenCols = ["N°", "Observaciones", "C1", "C2"];
-  let headers = Object.keys(pageData[0]).filter(h => !hiddenCols.includes(h));
+  let headers = Object.keys(pageData[0] || {}).filter(h => !hiddenCols.includes(h));
 
   let html = "<table><tr>";
   headers.forEach(h => html += `<th>${h}</th>`);
@@ -199,7 +201,6 @@ function renderTable() {
     html += `<tr onclick="irAMapa('${rp}')">`;
 
     headers.forEach(h => {
-
       let value = row[h] || "";
 
       if (h.toUpperCase().includes("FOTO") && value) {
@@ -249,7 +250,7 @@ function initMap() {
 function renderMap(data) {
 
   markersLayer.clearLayers();
-  markersByRP = {}; // 🔥 reset
+  markersByRP = {};
 
   data.forEach(row => {
 
@@ -263,24 +264,14 @@ function renderMap(data) {
 
     let rp = getCol(row, "N°RP") || getCol(row, "RP") || "-";
 
-    let popup = `
-      <b>${rp}</b><br>
-      ${row.Calle || ""}<br>
-      <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
-    `;
-
     let marker = L.circleMarker([lat, lng], {
       radius: 4,
-      color: "#2d6cdf",
-      weight: 1,
-      fillOpacity: 0.8
+      color: "#2d6cdf"
     });
 
-    marker.bindPopup(popup);
+    marker.bindPopup(`<b>${rp}</b><br>${row.Calle || ""}`);
 
     markersLayer.addLayer(marker);
-
-    // 🔥 guardar referencia
     markersByRP[rp] = marker;
   });
 
@@ -293,12 +284,11 @@ function renderMap(data) {
 function irAMapa(rp) {
 
   let marker = markersByRP[rp];
-
   if (!marker) return;
 
   let latlng = marker.getLatLng();
 
-  map.setView(latlng, 18); // 🔥 zoom fuerte
+  map.setView(latlng, 18);
   marker.openPopup();
 }
 
@@ -309,6 +299,9 @@ document.getElementById("rpFilter").addEventListener("input", applyFilters);
 
 // ================= INIT =================
 loadData();
+
+// 🔥 iniciar en PADRON
+cambiarVista("padron");
 
 </script>
 
