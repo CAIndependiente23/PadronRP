@@ -29,6 +29,7 @@ body { font-family: Arial; margin: 20px; background: #f6f7fb; }
 table { width: 100%; border-collapse: collapse; background: white; }
 th { background: #f1f3f6; padding: 10px; position: sticky; top: 0; }
 td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+
 tr:hover { background: #eef5ff; cursor: pointer; }
 
 .filters { margin: 10px 0; }
@@ -72,9 +73,12 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 <div id="vistaAnalisis" style="display:none;">
 
   <h3 id="tituloAnalisis"></h3>
+
   <div id="botonesMeses" style="margin-bottom:15px;"></div>
 
-  <div style="background:white; padding:20px; border-radius:10px;">
+  <div id="tablaAnalisis"></div>
+
+  <div style="background:white; padding:20px; border-radius:10px; margin-top:20px;">
     <canvas id="graficoAnalisis"></canvas>
   </div>
 
@@ -85,6 +89,14 @@ tr:hover { background: #eef5ff; cursor: pointer; }
 // ================= CONFIG =================
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
 const URL_ANALISIS = "https://docs.google.com/spreadsheets/d/1hApdn-eXp8OYBdDuCO3KEUTuxaOGL4ANZ-PZdcaIAt0/export?format=csv";
+
+const PLIEGO = {
+  "Zona 1": 8103,
+  "Zona 2": 1127,
+  "Zona 3": 3156,
+  "Zona 4": 3839,
+  "Zona 5": 581
+};
 
 // ================= VARIABLES =================
 let dataGlobal = [];
@@ -114,7 +126,6 @@ function cambiarVista(vista){
     cargarAnalisis();
   }
 
-  // 🔥 FIX MAPA
   if(vista === "padron"){
     setTimeout(() => {
       if(map){
@@ -207,23 +218,56 @@ function crearBotonesMeses(){
 
 function generarGraficoMes(mes){
 
-  let zonas = [...new Set(dataAnalisis.map(r => r.ZONA).filter(Boolean))];
+  let zonas = Object.keys(PLIEGO);
   let acumulado = {};
   zonas.forEach(z => acumulado[z] = 0);
 
   dataAnalisis.forEach(r => {
+
     let f = parseFecha(r.FECHA);
     if(!f) return;
+
     if(f.getFullYear().toString() !== anioActual) return;
     if(f.getMonth() !== mes) return;
 
     let z = r.ZONA;
     let l = parseFloat((r["L(m)"] || "0").replace(",", ".")) || 0;
 
-    if(z) acumulado[z] += l;
+    if(z && acumulado[z] !== undefined){
+      acumulado[z] += l;
+    }
   });
 
+  renderTablaAnalisis(zonas, acumulado);
   renderGrafico(zonas, acumulado, mes);
+}
+
+function renderTablaAnalisis(zonas, data){
+
+  let html = `<table>
+    <tr>
+      <th>Zona</th>
+      <th>ML</th>
+      <th>Pliego</th>
+      <th>Pendientes</th>
+    </tr>`;
+
+  zonas.forEach(z => {
+
+    let ml = data[z] || 0;
+    let pl = PLIEGO[z] || 0;
+    let pend = pl - ml;
+
+    html += `<tr>
+      <td>${z}</td>
+      <td>${ml.toFixed(0)}</td>
+      <td>${pl}</td>
+      <td>${pend.toFixed(0)}</td>
+    </tr>`;
+  });
+
+  html += `</table>`;
+  document.getElementById("tablaAnalisis").innerHTML = html;
 }
 
 function renderGrafico(zonas, data, mes){
