@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>REJAS PERIMETRALES</title>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+body { font-family: Arial; margin: 20px; background: #f6f7fb; }
+h2 { margin-bottom: 10px; }
+
+.filters { margin-bottom: 15px; }
+
+select, input {
+  padding: 6px;
+  margin-right: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  margin-top: 10px;
+}
+
+th {
+  background: #f1f3f6;
+  position: sticky;
+  top: 0;
+  padding: 10px;
+}
+
+td {
+  padding: 8px;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+}
+
+tr:hover { background: #eef5ff; cursor: pointer; }
+
+a {
+  color: #2d6cdf;
+  text-decoration: none;
+}
+
+a:hover { text-decoration: underline; }
+
+#map {
+  height: 500px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+}
+
+.pagination { margin-top: 10px; }
+
+button {
+  margin: 2px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h2>REJAS PERIMETRALES</h2>
+
+<h3>Elementos</h3>
+<div id="map"></div>
+
+<div class="filters">
+  <label>Zona:</label>
+  <select id="zonaFilter">
+    <option value="TODAS">Todas</option>
+  </select>
+
+  <label>Mes:</label>
+  <select id="mesFilter">
+    <option value="TODOS">Todos</option>
+  </select>
+
+  <label>Buscar calle:</label>
+  <input type="text" id="calleFilter" placeholder="Ej: Corrientes">
+
+  <label>Buscar N°RP:</label>
+  <input type="text" id="rpFilter" placeholder="Ej: RP-Z1-123">
+</div>
+
+<div id="table"></div>
+<div class="pagination" id="pagination"></div>
+
+<script>
+
+const SHEET_URL =
+"https://docs.google.com/spreadsheets/d/1X29sMRVSMisIlXQfoWVqjwBst2blhjlRTi2JrBDejA0/export?format=csv&gid=0";
+
+let dataGlobal = [];
+let filteredData = [];
+let currentPage = 1;
+const pageSize = 100;
+
+let map;
+let markersLayer;
+let markersByRP = {}; // 🔥 clave
+
+// ================= HELPERS =================
+function getCol(row, name) {
+  let key = Object.keys(row).find(k =>
+    k.trim().toUpperCase() === name.trim().toUpperCase()
+  );
+  return key ? row[key] : "";
+}
+
+// ================= LOAD =================
+function loadData() {
+
+  Papa.parse(SHEET_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+
+      dataGlobal = results.data;
+
+      fillZoneFilter();
+      fillMonthFilter();
+      filteredData = dataGlobal;
+
+      initMap();
+      renderTable();
+      renderPagination();
+      renderMap(filteredData);
+    }
+  });
+}
+
+// ================= ZONAS =================
+function fillZoneFilter() {
+
+  let select = document.getElementById("zonaFilter");
+
+  let zonas = [...new Set(dataGlobal.map(r => r.Zona).filter(Boolean))];
+
+  zonas.forEach(z => {
+    let opt = document.createElement("option");
+    opt.value = z;
+    opt.textContent = z;
+    select.appendChild(opt);
+  });
+}
+
+
+function fillMonthFilter() {
+
+  let select = document.getElementById("mesFilter");
+
+  let meses = [...new Set(
+    dataGlobal
+      .map(row => {
+        let fecha = getCol(row, "Fecha de limpieza");
+        if (!fecha) return null;
+        let partes = fecha.split("/");
+        if (partes.length < 3) return null;
+        return partes[1].padStart(2,"0") + "/" + partes[2];
+      })
+      .filter(Boolean)
+  )];
+
+  meses.sort((a,b) => {
+    let [ma,ya] = a.split("/");
+    let [mb,yb] = b.split("/");
+    return new Date(yb,mb-1) - new Date(ya,ma-1);
+  });
+
+  const nombresMeses = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+  ];
+
+  meses.forEach(m => {
+    let [mes,anio] = m.split("/");
+    let opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = nombresMeses[parseInt(mes)-1] + " " + anio;
+    select.appendChild(opt);
+  });
+}
+
+// ================= FILTER =================
+function applyFilters() {
+
+  let zona = document.getElementById("zonaFilter").value;
+  let mes = document.getElementById("mesFilter").value;
+  let calle = document.getElementById("calleFilter").value.toUpperCase();
+  let rpSearch = document.getElementById("rpFilter").value.toUpperCase();
+
+  filteredData = dataGlobal.filter(row => {
+
+    let matchZona = (zona === "TODAS" || row.Zona === zona);
+
+    let fecha = getCol(row, "Fecha de limpieza");
+
+    let matchMes = true;
+
+    if (mes !== "TODOS") {
+
+      if (!fecha) {
+
+        matchMes = false;
+
+      } else {
+
+        let partes = fecha.split("/");
+
+        if (partes.length < 3) {
+
+          matchMes = false;
+
+        } else {
+
+          let mesFila = partes[1].padStart(2,"0") + "/" + partes[2];
+
+          matchMes = mesFila === mes;
+        }
+      }
+    }
+
+    let calleVal = getCol(row, "CALLE").toUpperCase();
+    let matchCalle = !calle || calleVal.includes(calle);
+
+    let rpVal = (getCol(row, "N°RP") || getCol(row, "RP")).toUpperCase();
+    let matchRP = !rpSearch || rpVal.includes(rpSearch);
+
+    return matchZona && matchMes && matchCalle && matchRP;
+  });
+
+  currentPage = 1;
+
+  renderTable();
+  renderPagination();
+  renderMap(filteredData);
+}
+
+// ================= TABLE =================
+function renderTable() {
+
+  let start = (currentPage - 1) * pageSize;
+  let pageData = filteredData.slice(start, start + pageSize);
+
+  if (!pageData.length) {
+    document.getElementById("table").innerHTML = "<p>No hay resultados</p>";
+    return;
+  }
+
+  let hiddenCols = ["N°", "Observaciones", "C1", "C2"];
+  let headers = Object.keys(pageData[0]).filter(h => !hiddenCols.includes(h));
+
+  let html = "<table><tr>";
+  headers.forEach(h => html += `<th>${h}</th>`);
+  html += "</tr>";
+
+  pageData.forEach(row => {
+
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "";
+
+    html += `<tr onclick="irAMapa('${rp}')">`;
+
+    headers.forEach(h => {
+
+      let value = row[h] || "";
+
+      if (h.toUpperCase().includes("FOTO") && value) {
+        value = `<a href="${value}" target="_blank">Ver</a>`;
+      }
+
+      html += `<td>${value}</td>`;
+    });
+
+    html += "</tr>";
+  });
+
+  html += "</table>";
+
+  document.getElementById("table").innerHTML = html;
+}
+
+// ================= PAGINATION =================
+function renderPagination() {
+
+  let totalPages = Math.ceil(filteredData.length / pageSize);
+
+  let html = "";
+
+  for (let i = 1; i <= totalPages; i++) {
+    html += `<button onclick="goPage(${i})">${i}</button>`;
+  }
+
+  document.getElementById("pagination").innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderTable();
+}
+
+// ================= MAP =================
+function initMap() {
+
+  map = L.map('map').setView([-34.6037, -58.3816], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+function renderMap(data) {
+
+  markersLayer.clearLayers();
+  markersByRP = {}; // 🔥 reset
+
+  data.forEach(row => {
+
+    if (!row.C1) return;
+
+    let coords = row.C1.split(",");
+    let lat = parseFloat(coords[0]);
+    let lng = parseFloat(coords[1]);
+
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    let rp = getCol(row, "N°RP") || getCol(row, "RP") || "-";
+
+    let popup = `
+      <b>${rp}</b><br>
+      ${row.Calle || ""}<br>
+      <a href="${row.Foto || "#"}" target="_blank">Ver foto</a>
+    `;
+
+    let marker = L.circleMarker([lat, lng], {
+      radius: 4,
+      color: "#2d6cdf",
+      weight: 1,
+      fillOpacity: 0.8
+    });
+
+    marker.bindPopup(popup);
+
+    markersLayer.addLayer(marker);
+
+    // 🔥 guardar referencia
+    markersByRP[rp] = marker;
+  });
+
+  if (markersLayer.getLayers().length > 0) {
+    map.fitBounds(markersLayer.getBounds());
+  }
+}
+
+// ================= INTERACCION =================
+function irAMapa(rp) {
+
+  let marker = markersByRP[rp];
+
+  if (!marker) return;
+
+  let latlng = marker.getLatLng();
+
+  map.setView(latlng, 18); // 🔥 zoom fuerte
+  marker.openPopup();
+}
+
+// ================= EVENTS =================
+document.getElementById("zonaFilter").addEventListener("change", applyFilters);
+document.getElementById("mesFilter").addEventListener("change", applyFilters);
+document.getElementById("calleFilter").addEventListener("input", applyFilters);
+document.getElementById("rpFilter").addEventListener("input", applyFilters);
+
+// ================= INIT =================
+loadData();
+
+</script>
+
+</body>
+</html>
